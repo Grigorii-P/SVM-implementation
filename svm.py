@@ -12,9 +12,6 @@ class SVMTrainer(object):
         self._c = c
 
     def train(self, X, y):
-        """Given the training features X with labels y, returns an SVM
-        predictor representing the trained SVM.
-        """
         lagrange_multipliers = self._compute_multipliers(X, y)
         return self._construct_predictor(X, y, lagrange_multipliers)
 

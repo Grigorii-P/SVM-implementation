@@ -1,23 +1,17 @@
-import numpy
-from numpy import linalg
+import numpy as np
+import numpy.linalg as la
 
 
-def linear(x, y):
-    return numpy.inner(x, y)
+class Kernel(object):
+    @staticmethod
+    def linear():
+        return lambda x, y: np.inner(x, y)
 
-# def linear():
-#     def f(x, y):
-#         return numpy.inner(x, y)
-#     return f
-    
+    @staticmethod
+    def gaussian(sigma):
+        return lambda x, y: \
+            np.exp(-np.sqrt(la.norm(x-y) ** 2 / (2 * sigma ** 2)))
 
-# def gaussian(sigma):
-#     def f(x, y):
-#         return numpy.exp(-linalg.norm(x - y)** 2 / (2 * (sigma ** 2)))
-#     return f
-    
-
-# def polynomial(dim, offset):
-#     def f(x, y):
-#         return (offset + numpy.dot(x, y)) ** dim
-#     return f
+    @staticmethod
+    def polynomial(dimension, offset):
+        return lambda x, y: (offset + np.inner(x, y)) ** dimension
