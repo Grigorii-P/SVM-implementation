@@ -7,7 +7,6 @@ import svm
 import time
 import copy
 
-
 def accuracy(x, y):
     count = 0
     for i in range(len(x)):
@@ -16,6 +15,7 @@ def accuracy(x, y):
     return count/len(x)
 
 
+# break down the 'Date' field and make one-hot vectors out of categorical fields
 train = pd.read_csv('/Users/grigoriipogorelov/Desktop/train.csv')
 train['Date'] = pd.to_datetime(train['Dates'], errors='coerce')
 train['Year'] = train['Date'].dt.year
@@ -24,20 +24,26 @@ train['WeekOfYear'] = train['Date'].dt.weekofyear
 train['Day'] = train['Date'].dt.day
 train['Time'] = train['Date'].dt.time
 train['Hour'] = train['Date'].dt.hour
-train = train.drop(['Dates','Date','Time','Resolution','Descript','Address'], axis=1)
+train = train.drop(['Dates','Date','Time','Resolution','Descript','Address','WeekOfYear', 'DayOfWeek'], axis=1)
 
-cat_cols = ['DayOfWeek','PdDistrict', 'Year', 'Month', 'WeekOfYear', 'Day', 'Hour']
+cat_cols = ['PdDistrict', 'Year', 'Month', 'Day', 'Hour']
 for cat in cat_cols:
     train = pd.get_dummies(train, columns=[cat])
 
+# reduce amount of data for training
 train_len = len(train)
-train_proportion = 0.005
+data_portion = 0.008
+# shuffle the data
 train = train.sample(frac=1)
-train = train.iloc[:int(len(train)*train_proportion)]
+train = train.iloc[:int(len(train)*data_portion)]
 copy_ = copy.copy(train)
 test = copy_.iloc[int(len(train)*0.8):]
 train = train.iloc[:int(len(train)*0.8)]
 
+# samples - paired categories
+# For example, if there are three categories - THEFT, ASSAULT, BURGLARY,
+# then samples would be: [THEFT+ASSAULT, THEFT+BURGLARY, ASSAULT+BURGLARY]
+# This is for training (n(n+1)/2) classifiers
 categories = train.Category.unique()
 category_len = len(train['Category'].unique())
 samples = []
@@ -45,6 +51,7 @@ for i in range(category_len - 1):
     for j in range(i + 1, category_len):
         samples.append(categories[i] + '+' + categories[j])
 
+# breaking down the dataset for getting (n(n+1)/2) pieces according to the number of classifiers
 train_sets = []
 for sample in samples:
     cats = sample.split('+')
@@ -52,12 +59,10 @@ for sample in samples:
     train_1 = train.loc[train['Category'] == cats[1]]
     frames = [train_0, train_1]
     train_sets.append(pd.concat(frames))
-
 print(train.shape)
 
-
+# training process
 start = time.time()
-
 models = []
 cat_to_number_each_model = []
 C = 0.1
@@ -70,14 +75,13 @@ for i, data in enumerate(train_sets):
     data[data == options[1]] = -1
     _d['-1'] = options[1]
     data = np.array(data, dtype='float')
-    trainer = svm.SVMTrainer(kernel=Kernel.polynomial(2,0), c=C)
+    trainer = svm.SVMTrainer(kernel=Kernel.linear(), c=C)
     model = trainer.train(data[:,1:], data[:,0])
     models.append(model)
     cat_to_number_each_model.append(_d)
     print()
     print('MODEL '+str(i)+' finished')
     print()
-
 end = time.time()
 print(int((end - start)/60), ' minutes for training')
 
@@ -85,9 +89,8 @@ labels = test['Category'].as_matrix()
 test = test.as_matrix()
 test = np.array(test[:, 1:], dtype='float')
 
+# predictions for the whole dataset for each of the models
 start = time.time()
-
-# should stick to 'samples' order
 predictions_for_each_model = []
 for model in models:
     pred = []
@@ -98,12 +101,12 @@ for model in models:
 end = time.time()
 print(int((end - start) / 60), ' minutes for predicting')
 
-
 count_for_categories = {}
 for cat in categories:
     count_for_categories[cat] = 0
 
-
+# here we have a major voting, predictions from all the models for a sample item are combined,
+# the most frequent category wins
 combo_predictions = []
 pred_len = len(predictions_for_each_model[0])
 # for every prediction of a model
@@ -115,5 +118,7 @@ for i in range(pred_len):
     winner = max(count_cat, key=count_cat.get)
     combo_predictions.append(winner)
 
-acc = accuracy(labels, combo_predictions)
-print('accuracy is ', acc)
+accuracy = accuracy(labels, combo_predictions)
+print('accuracy is ', accuracy)
+
+# one of the major problems lies in 'cvxopt', cause it's calculations are too time-consuming
